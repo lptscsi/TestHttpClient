@@ -1,9 +1,9 @@
-using HttpClientSample.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.IO;
-using TestWorker.Extensions;
+using TestWorker.Http.Extensions;
+using TestWorker.Http.Options;
 using TestWorker.Services;
 
 namespace TestWorker
@@ -26,9 +26,9 @@ namespace TestWorker
                 })
                 .ConfigureServices((hostContext, services) =>
                 {
-                    services.AddSingleton<ICredentialStore, CredentialStore>();
-                    services.Configure<TransportHttpOptions>(hostContext.Configuration.GetSection(TransportHttpOptions.NAME));
-                    services.AddTransportHttpClient<TransportHttpOptions>(TransportHttpOptions.NAME, hostContext.Configuration);
+                    var options = hostContext.Configuration.GetSection(TransportHttpOptions.NAME).Get<TransportHttpOptions>();
+                 
+                    services.AddTransportHttpClient<ITransportHttpOptions>(options, hostContext.Configuration);
                     services.AddHostedService<Worker>();
                     services.AddHostedService<LifetimeEventsHostedService>();
                 });

@@ -1,6 +1,6 @@
-﻿using TestWorker.Credentials;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
+using TestWorker.Credentials;
 
 namespace TestWorker.Services
 {

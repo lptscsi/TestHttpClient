@@ -1,4 +1,4 @@
-﻿namespace HttpClientSample.Options
+﻿namespace TestWorker.Http.Policy
 {
     public class RetryPolicyOptions
     {

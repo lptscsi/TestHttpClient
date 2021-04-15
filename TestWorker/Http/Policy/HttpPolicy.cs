@@ -1,10 +1,9 @@
-﻿using HttpClientSample.Options;
-using Polly;
+﻿using Polly;
 using Polly.Extensions.Http;
 using System;
 using System.Net.Http;
 
-namespace TestWorker.Http
+namespace TestWorker.Http.Policy
 {
     internal static class HttpPolicy
     {
@@ -31,7 +30,7 @@ namespace TestWorker.Http
 
         public static IAsyncPolicy<HttpResponseMessage> GetTimeout(TimeSpan time)
         {
-           return Policy.TimeoutAsync<HttpResponseMessage>(time);
+           return Polly.Policy.TimeoutAsync<HttpResponseMessage>(time);
         }
     }
 }

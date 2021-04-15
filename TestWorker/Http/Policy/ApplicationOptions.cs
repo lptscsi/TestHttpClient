@@ -1,4 +1,6 @@
-﻿namespace HttpClientSample.Options
+﻿using TestWorker.Http.Options;
+
+namespace TestWorker.Http.Policy
 {
     public class ApplicationOptions
     {

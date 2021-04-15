@@ -1,9 +1,8 @@
-﻿namespace TestWorker.Extensions
+﻿namespace TestWorker.Http.Extensions
 {
-    using HttpClientSample.Options;
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
-    using TestWorker.Http;
+    using TestWorker.Http.Policy;
 
     public static class HttpClientBuilderExt
     {
