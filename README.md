@@ -1,2 +1,2 @@
-# TestHHTPClient
-Testing HHTPClient in Net.Core
+# TestHttpClient
+Testing HttpClient in Net.Core
