@@ -19,10 +19,12 @@ namespace TestWorker
         private readonly ITransportHttpOptions _options;
         private readonly IServiceProvider _serviceProvider;
         private readonly ICredentialStore _credentialStore;
+        private readonly IHttpClientFactory _httpClientFactory;
 
         public Worker(
             ILogger<Worker> logger, 
-            IHostEnvironment environment, 
+            IHostEnvironment environment,
+            IHttpClientFactory httpClientFactory,
             ITransportHttpOptions options,
             IServiceProvider serviceProvider,
             ICredentialStore credentialStore
@@ -30,6 +32,7 @@ namespace TestWorker
         {
             _logger = logger;
             _environment = environment;
+            _httpClientFactory = httpClientFactory;
             _options = options;
             _serviceProvider = serviceProvider;
             _credentialStore = credentialStore;
@@ -37,25 +40,20 @@ namespace TestWorker
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            
+
             // _credentialStore.SetCredential(TransportHttpOptions.NAME, new CredentialPFX());
 
-            using (var scope = _serviceProvider.CreateScope())
-            {
-                var httpFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
+            var http = new TransportHttp<string>(
+             _options,
+             _httpClientFactory);
 
-               var http = new TransportHttp<string>(
-               _options,
-                httpFactory);
+            http.OnResponse += Transport_OnResponse;
 
-                http.OnResponse += Transport_OnResponse;
-                await http.Execute();
-            }
-            
             Console.WriteLine(_environment.EnvironmentName);
             while (!stoppingToken.IsCancellationRequested)
             {
                 _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+                await http.Execute();
                 await Task.Delay(3000, stoppingToken);
             }
             
@@ -64,7 +62,7 @@ namespace TestWorker
         private Task Transport_OnResponse(object sender, TransportHttpResponseEventArgs e)
         {
             Console.WriteLine($"OnResponse {DateTime.Now:O}");
-            Console.WriteLine(e.Message.Left(5000));
+            Console.WriteLine(e.Message.Left(1000));
             Console.WriteLine();
             return Task.CompletedTask;
         }

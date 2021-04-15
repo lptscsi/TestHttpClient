@@ -36,8 +36,6 @@ namespace TestWorker.Http
 
         public CookieCollection Cookies { get; private set; }
 
-        public TBody Body { get; private set; }
-
         public string Request { get; private set; }
 
         public string Response { get; private set; }
@@ -110,13 +108,11 @@ namespace TestWorker.Http
         public TransportHttp(
             ITransportHttpOptions options,
             IHttpClientFactory httpClientFactory,
-            TBody body = default,
             Encoding transportEncoding = null,
             CookieCollection cookies = null)
         {
             this.Options = options;
             this.HttpClientFactory = httpClientFactory;
-            this.Body = body;
             this.TransportEncoding = transportEncoding ?? Encoding.UTF8;
             this.Cookies = cookies;
             this.headers = this.Options.Headers?.ToList() ?? new List<KeyValuePair<string, string>>();
@@ -143,9 +139,19 @@ namespace TestWorker.Http
 
         #endregion
 
-        protected virtual Task<HttpContent> CreateContent()
+        protected virtual void Init()
         {
-            return this.CreateContent(this.Body, this.TransportEncoding, this.ContentType);
+            this.StatusCode = default;
+            this.Request = null;
+            this.Response = null;
+            this.ResponseBody = default;
+            this.ResponseHeaders = default;
+            this.ResponseCookies = default;
+        }
+
+        protected virtual Task<HttpContent> CreateContent(TBody body)
+        {
+            return this.CreateContent(body, this.TransportEncoding, this.ContentType);
         }
 
         protected virtual Task<HttpContent> CreateContent(object data, Encoding encoding, string contentType)
@@ -184,8 +190,15 @@ namespace TestWorker.Http
 
         public virtual async Task<bool> Execute()
         {
+            return await this.Execute(body: default);
+        }
+
+        public virtual async Task<bool> Execute(TBody body)
+        {
             try
             {
+                this.Init();
+
                 var httpMethod = new HttpMethod(this.Options.Method.ToUpper());
 
                 var request = new HttpRequestMessage() { Method = httpMethod };
@@ -215,17 +228,16 @@ namespace TestWorker.Http
 
                 headers.ForEach(kvp => { request.Headers.Add(kvp.Key, kvp.Value); });
 
-                Request = GetRequestLog(request);
-
-                await this.RaiseRequest(this, new TransportHttpRequestEventArgs(Request));
-
-                HttpContent content = await this.CreateContent();
+                HttpContent content = await this.CreateContent(body);
 
                 if (content != null)
                 {
                     request.Content = content;
                 }
 
+                Request = GetRequestLog(request, body);
+
+                await this.RaiseRequest(this, new TransportHttpRequestEventArgs(Request));
 
                 using var client = HttpClientFactory.CreateClient(this.Options.HttpClientName);
 
@@ -292,7 +304,7 @@ namespace TestWorker.Http
             await onFail.InvokeAsync(sender, e);
         }
 
-        private string GetRequestLog(HttpRequestMessage request)
+        private string GetRequestLog(HttpRequestMessage request, TBody body)
         {
             StringBuilder requestLog = new StringBuilder();
             requestLog.AppendFormat($"{request.Method} {request.RequestUri}\r\n");
@@ -305,18 +317,18 @@ namespace TestWorker.Http
 
             requestLog.AppendLine();
 
-            if (this.Body != null)
+            if (body != null)
             {
-                switch (this.Body)
+                switch (body)
                 {
-                    case byte[] body:
+                    case byte[] _body:
                         {
-                            requestLog.AppendLine(Convert.ToBase64String(body));
+                            requestLog.AppendLine(Convert.ToBase64String(_body));
                         }
                         break;
                     default:
                         {
-                            requestLog.AppendLine(this.Body.ToString());
+                            requestLog.AppendLine(body.ToString());
                         }
                         break;
                 };

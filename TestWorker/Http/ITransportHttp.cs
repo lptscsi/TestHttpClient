@@ -10,7 +10,6 @@ namespace TestWorker.Http
 {
     public interface ITransportHttp<TBody>
     {
-        TBody Body { get; }
         CookieCollection Cookies { get; }
         ITransportHttpOptions Options { get; }
         string Request { get; }
@@ -26,6 +25,6 @@ namespace TestWorker.Http
         event AsyncWrapperEventHandler<TransportHttpResponseEventArgs> OnResponse;
         event AsyncWrapperEventHandler<EventArgs> OnSuccess;
 
-        Task<bool> Execute();
+        Task<bool> Execute(TBody body);
     }
 }
