@@ -8,23 +8,25 @@ using TestWorker.Http.Options;
 
 namespace TestWorker.Http
 {
+    public record Response(
+         string Value,
+         byte[] RawValue,
+         bool IsRaw,
+         bool IsAssigned,
+         Dictionary<string, string> ResponseHeaders,
+         CookieCollection ResponseCookies,
+         HttpStatusCode StatusCode);
+
     public interface ITransportHttp<TBody>
     {
         CookieCollection Cookies { get; }
         ITransportHttpOptions Options { get; }
-        string Request { get; }
-        string Response { get; }
-        (string Value, byte[] RawValue, bool IsRaw, bool IsAssigned) ResponseBody { get; }
-        CookieCollection ResponseCookies { get; }
-        Dictionary<string, string> ResponseHeaders { get; }
-        HttpStatusCode StatusCode { get; }
         Encoding TransportEncoding { get; }
 
         event AsyncWrapperEventHandler<TransportHttpFailEventArgs> OnFail;
         event AsyncWrapperEventHandler<TransportHttpRequestEventArgs> OnRequest;
-        event AsyncWrapperEventHandler<TransportHttpResponseEventArgs> OnResponse;
-        event AsyncWrapperEventHandler<EventArgs> OnSuccess;
+        event AsyncWrapperEventHandler<TransportHttpResponseEventArgs> OnSuccess;
 
-        Task<bool> Execute(TBody body);
+        Task<Response> Execute(TBody body);
     }
 }

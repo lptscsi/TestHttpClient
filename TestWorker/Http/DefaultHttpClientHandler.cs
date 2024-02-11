@@ -13,10 +13,7 @@
         {
             this.AutomaticDecompression = DecompressionMethods.All;
             this.ServerCertificateCustomValidationCallback = ServerCertificateCustomValidation;
-            this.SslProtocols = SecurityProtocolType.Tls
-                | SecurityProtocolType.Tls11
-                | SecurityProtocolType.Tls12
-                | SecurityProtocolType.Tls13;
+            this.SslProtocols =  SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
 
             // получаем Cookies в ручную
             this.UseCookies = false;

@@ -36,27 +36,18 @@ namespace TestWorker.Http
 
         public CookieCollection Cookies { get; private set; }
 
-        public string Request { get; private set; }
-
-        public string Response { get; private set; }
-
-        public (string Value, byte[] RawValue, bool IsRaw, bool IsAssigned) ResponseBody { get; private set; }
-
-        public Dictionary<string, string> ResponseHeaders { get; private set; }
-        public CookieCollection ResponseCookies { get; private set; }
-        public HttpStatusCode StatusCode { get; private set; }
-
+     
         #region Events
 
         /// <summary>
         /// Обработчик успешной отправки сообщения
         /// </summary>
-        private AsyncEventingWrapper<EventArgs> onSuccess;
+        private AsyncEventingWrapper<TransportHttpResponseEventArgs> onSuccess;
 
         /// <summary>
         /// Событие успешной отправки сообщения
         /// </summary>
-        public event AsyncWrapperEventHandler<EventArgs> OnSuccess
+        public event AsyncWrapperEventHandler<TransportHttpResponseEventArgs> OnSuccess
         {
             add => onSuccess.AddHandler(value);
             remove => onSuccess.RemoveHandler(value);
@@ -90,19 +81,6 @@ namespace TestWorker.Http
             remove => onRequest.RemoveHandler(value);
         }
 
-        /// <summary>
-        /// Обработчик ответа отправки сообщения
-        /// </summary>
-        private AsyncEventingWrapper<TransportHttpResponseEventArgs> onResponse;
-
-        /// <summary>
-        /// Событие ответа отправки сообщения
-        /// </summary>
-        public event AsyncWrapperEventHandler<TransportHttpResponseEventArgs> OnResponse
-        {
-            add => onResponse.AddHandler(value);
-            remove => onResponse.RemoveHandler(value);
-        }
         #endregion
 
         public TransportHttp(
@@ -138,16 +116,6 @@ namespace TestWorker.Http
         }
 
         #endregion
-
-        protected virtual void Init()
-        {
-            this.StatusCode = default;
-            this.Request = null;
-            this.Response = null;
-            this.ResponseBody = default;
-            this.ResponseHeaders = default;
-            this.ResponseCookies = default;
-        }
 
         protected virtual Task<HttpContent> CreateContent(TBody body)
         {
@@ -188,17 +156,15 @@ namespace TestWorker.Http
             return Task.FromResult(result);
         }
 
-        public virtual async Task<bool> Execute()
+        public virtual async Task<Response> Execute()
         {
             return await this.Execute(body: default);
         }
 
-        public virtual async Task<bool> Execute(TBody body)
+        public virtual async Task<Response> Execute(TBody body)
         {
             try
             {
-                this.Init();
-
                 var httpMethod = new HttpMethod(this.Options.Method.ToUpper());
 
                 var request = new HttpRequestMessage() { Method = httpMethod };
@@ -235,53 +201,47 @@ namespace TestWorker.Http
                     request.Content = content;
                 }
 
-                Request = GetRequestLog(request, body);
+                string requestLog = GetRequestLog(request, body);
 
-                await this.RaiseRequest(this, new TransportHttpRequestEventArgs(Request));
+                await this.RaiseRequest(this, new TransportHttpRequestEventArgs(requestLog));
 
                 using var client = HttpClientFactory.CreateClient(this.Options.HttpClientName);
 
-                using HttpResponseMessage response = await client.SendAsync(request);
+                using HttpResponseMessage httpResponse = await client.SendAsync(request);
 
-                this.StatusCode = response.StatusCode;
+                HttpStatusCode statusCode = httpResponse.StatusCode;
 
-                if (response.IsSuccessStatusCode)
-                {
-                    ResponseHeaders = GetResponseHeaders(response);
+                httpResponse.EnsureSuccessStatusCode();
 
-                    ResponseCookies = GetResponseCookies(response);
+                Dictionary<string, string> responseHeaders = GetResponseHeaders(httpResponse);
 
-                    ResponseBody = await GetResponseBody(response);
-                }
+                CookieCollection responseCookies = GetResponseCookies(httpResponse);
 
-                Response = GetResponseLog(response);
+                (string Value, byte[] RawValue, bool IsRaw, bool IsAssigned) data = await GetResponseData(httpResponse);
 
-                response.EnsureSuccessStatusCode();
+                string responseLog = GetResponseLog(httpResponse, responseHeaders, data);
 
-                await ProcessResponse(response);
+                Response res = new Response(data.Value, data.RawValue, data.IsRaw, data.IsAssigned, responseHeaders, responseCookies, statusCode);
 
-                return await Complete();
+                await OnCompleted(res, responseLog);
+
+                return res;
             }
             catch (Exception e)
             {
-                return await Complete(e);
+                await OnFailed(e);
+                throw;
             }
         }
 
-        protected virtual async Task<bool> Complete(Exception ex = null)
+        protected virtual async Task OnCompleted(Response res, string responseLog)
         {
-            await RaiseResponse(this, new TransportHttpResponseEventArgs(ex == null ? this.Response : ex.GetFullMessage()));
+            await RaiseSuccess(this, new TransportHttpResponseEventArgs(responseLog));
+        }
 
-            if (ex == null)
-            {
-                await RaiseSuccess(this, new EventArgs());
-            }
-            else
-            {
-                await RaiseFail(this, new TransportHttpFailEventArgs(ex.GetFullMessage()));
-            }
-
-            return ex == null;
+        protected virtual async Task OnFailed(Exception ex, string responseLog = null)
+        {
+            await RaiseFail(this, new TransportHttpFailEventArgs(ex.GetFullMessage()));
         }
 
         protected virtual async Task RaiseRequest(object sender, TransportHttpRequestEventArgs e)
@@ -289,12 +249,7 @@ namespace TestWorker.Http
             await onRequest.InvokeAsync(sender, e);
         }
 
-        protected virtual async Task RaiseResponse(object sender, TransportHttpResponseEventArgs e)
-        {
-            await onResponse.InvokeAsync(sender, e);
-        }
-
-        private async Task RaiseSuccess(object sender, EventArgs e)
+        private async Task RaiseSuccess(object sender, TransportHttpResponseEventArgs e)
         {
             await onSuccess.InvokeAsync(sender, e);
         }
@@ -373,7 +328,7 @@ namespace TestWorker.Http
             return EMPTY_COOKIES;
         }
 
-        protected virtual async Task<(string Value, byte[] RawValue, bool IsRaw, bool IsAssigned)> GetResponseBody(HttpResponseMessage response)
+        protected virtual async Task<(string Value, byte[] RawValue, bool IsRaw, bool IsAssigned)> GetResponseData(HttpResponseMessage response)
         {
             var contentType = response.Content.Headers.ContentType;
             byte[] bytes;
@@ -400,7 +355,10 @@ namespace TestWorker.Http
             }
         }
 
-        private string GetResponseLog(HttpResponseMessage response)
+        private string GetResponseLog(
+            in HttpResponseMessage response,
+            in Dictionary<string, string> headers,
+            in (string Value, byte[] RawValue, bool IsRaw, bool IsAssigned) data)
         {
             if (response == null)
             {
@@ -410,25 +368,20 @@ namespace TestWorker.Http
             StringBuilder responseLog = new StringBuilder();
             responseLog.AppendFormat($"{response.RequestMessage.RequestUri.Scheme.ToUpper()} {response.Version} {(int)response.StatusCode} {response.StatusCode}\r\n");
 
-            if (ResponseHeaders != null)
+            if (headers != null)
             {
-                foreach (var key in ResponseHeaders.Keys)
+                foreach (var key in headers.Keys)
                 {
-                    responseLog.AppendFormat($"{key}: {ResponseHeaders[key]}\r\n");
+                    responseLog.AppendFormat($"{key}: {headers[key]}\r\n");
                 }
             }
 
-            if (ResponseBody.IsAssigned)
+            if (data.IsAssigned)
             {
                 responseLog.AppendLine();
-                responseLog.AppendLine(ResponseBody.IsRaw ? Convert.ToBase64String(ResponseBody.RawValue) : ResponseBody.Value);
+                responseLog.AppendLine(data.IsRaw ? Convert.ToBase64String(data.RawValue) : data.Value);
             }
             return responseLog.ToString();
-        }
-
-        protected virtual Task ProcessResponse(HttpResponseMessage response)
-        {
-            return Task.CompletedTask;
         }
 
         #endregion

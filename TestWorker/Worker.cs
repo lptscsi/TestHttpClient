@@ -2,7 +2,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Buffers;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using TestWorker.Extensions;
@@ -47,7 +49,7 @@ namespace TestWorker
              _options,
              _httpClientFactory);
 
-            http.OnResponse += Transport_OnResponse;
+            http.OnSuccess += Transport_OnResponse;
 
             Console.WriteLine(_environment.EnvironmentName);
             while (!stoppingToken.IsCancellationRequested)
@@ -61,10 +63,25 @@ namespace TestWorker
 
         private Task Transport_OnResponse(object sender, TransportHttpResponseEventArgs e)
         {
+            byte[] utf8 = Serialize(e.Message ?? "????");
+            string message = Deserialize<string>(utf8);
             Console.WriteLine($"OnResponse {DateTime.Now:O}");
-            Console.WriteLine(e.Message.Left(1000));
+            Console.WriteLine(message?.Left(1000)?? "NO Data!!!");
             Console.WriteLine();
             return Task.CompletedTask;
+        }
+
+        private static T Deserialize<T>(byte[] bytes)
+        {
+            return JsonSerializer.Deserialize<T>(bytes);
+        }
+
+        private static byte[] Serialize<T>(T value)
+        {
+            var buffer = new ArrayBufferWriter<byte>();
+            using var writer = new Utf8JsonWriter(buffer);
+            JsonSerializer.Serialize(writer, value);
+            return buffer.WrittenSpan.ToArray();
         }
     }
 }
